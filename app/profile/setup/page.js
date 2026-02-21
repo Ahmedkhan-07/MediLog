@@ -2,11 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from '@/components/AuthProvider';
 
 export default function ProfileSetupPage() {
     const router = useRouter();
-    const { update } = useSession();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [formData, setFormData] = useState({
@@ -46,10 +44,6 @@ export default function ProfileSetupPage() {
                 return;
             }
 
-            // Update session to reflect profileComplete
-            if (update) {
-                await update({ profileComplete: true, name: formData.fullName });
-            }
             router.push('/dashboard');
             router.refresh();
         } catch (err) {
