@@ -1,0 +1,135 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --bg-primary: #f8fafc;
+  --bg-card: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --border-color: #e2e8f0;
+  --accent-blue: #3b82f6;
+  --accent-cyan: #06b6d4;
+  --medical-green: #10b981;
+  --medical-red: #ef4444;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-700 text-white font-medium py-2.5 px-5 rounded-xl
+           transition-all duration-200 ease-in-out shadow-sm hover:shadow-md
+           active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply bg-white hover:bg-gray-50 text-gray-700 font-medium py-2.5 px-5 rounded-xl
+           border border-gray-200 transition-all duration-200 ease-in-out
+           shadow-sm hover:shadow-md active:scale-[0.98];
+  }
+
+  .btn-danger {
+    @apply bg-red-500 hover:bg-red-600 text-white font-medium py-2.5 px-5 rounded-xl
+           transition-all duration-200 ease-in-out shadow-sm hover:shadow-md active:scale-[0.98];
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl border border-gray-200 bg-white
+           text-gray-900 placeholder-gray-400
+           focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500
+           transition-all duration-200;
+  }
+
+  .card {
+    @apply bg-white rounded-2xl border border-gray-100 shadow-card
+           transition-all duration-300 hover:shadow-card-hover;
+  }
+
+  .card-static {
+    @apply bg-white rounded-2xl border border-gray-100 shadow-card;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+
+  .badge-blue {
+    @apply badge bg-blue-50 text-blue-700;
+  }
+
+  .badge-green {
+    @apply badge bg-emerald-50 text-emerald-700;
+  }
+
+  .badge-red {
+    @apply badge bg-red-50 text-red-700;
+  }
+
+  .badge-amber {
+    @apply badge bg-amber-50 text-amber-700;
+  }
+
+  .page-header {
+    @apply text-2xl md:text-3xl font-bold text-gray-900;
+  }
+
+  .page-subtitle {
+    @apply text-gray-500 mt-1;
+  }
+
+  .section-title {
+    @apply text-lg font-semibold text-gray-900;
+  }
+
+  .glass-card {
+    @apply bg-white/70 backdrop-blur-xl rounded-2xl border border-white/20 shadow-lg;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Toast animation */
+@keyframes toastSlideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.toast-enter {
+  animation: toastSlideIn 0.3s ease-out;
+}
