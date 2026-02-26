@@ -10,9 +10,10 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^6.38.1",
-    "@google/generative-ai": "^0.21.0",
+    "@google/generative-ai": "^0.24.1",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.5.1",
+    "lucide-react": "^0.575.0",
     "mongoose": "^8.9.2",
     "next": "^14.2.18",
     "next-auth": "^4.24.11",

@@ -133,3 +133,16 @@ body {
 .toast-enter {
   animation: toastSlideIn 0.3s ease-out;
 }
+
+@keyframes slideRight {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-right {
+  animation: slideRight 0.25s ease-out;
+}

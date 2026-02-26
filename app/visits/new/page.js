@@ -3,125 +3,168 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
+import { Loader2, Sparkles, Save, Plus, X, RefreshCw } from 'lucide-react';
 
-const SPECIALTIES = [
-    'General Physician', 'Cardiologist', 'Dermatologist', 'ENT Specialist',
-    'Gastroenterologist', 'Neurologist', 'Ophthalmologist', 'Orthopedic',
-    'Pediatrician', 'Psychiatrist', 'Pulmonologist', 'Urologist',
-    'Gynecologist', 'Dentist', 'Other',
-];
-
-const STEPS = ['Visit Info', 'Symptoms', 'Medicines & Rx', 'Review & Save'];
+const PAIN_CHARACTERS = ['Sharp', 'Dull', 'Burning', 'Pressure', 'Throbbing', 'Cramping'];
+const ASSOCIATED_SYMPTOMS = ['Fever', 'Nausea', 'Vomiting', 'Fatigue', 'Dizziness', 'Shortness of breath', 'Headache', 'Loss of appetite'];
 
 export default function NewVisitPage() {
     const router = useRouter();
-    const [step, setStep] = useState(0);
-    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
     const [aiLoading, setAiLoading] = useState(false);
     const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
+    const [validationErrors, setValidationErrors] = useState({});
+    const [aiSummary, setAiSummary] = useState('');
 
-    const [visitInfo, setVisitInfo] = useState({
+    const [form, setForm] = useState({
+        chiefComplaint: '',
+        problemStartDate: '',
+        onsetType: '',
+        painLocation: '',
+        painCharacter: [],
+        severityScore: 5,
+        aggravatingFactors: '',
+        relievingFactors: '',
+        associatedSymptoms: [],
+        medicineTaken: '',
+        similarEpisodeBefore: false,
+        similarEpisodeDetails: '',
+        recentHistory: '',
+        questionsForDoctor: [],
+        customNotes: '',
         doctorName: '',
-        hospitalName: '',
-        specialty: '',
         visitDate: new Date().toISOString().split('T')[0],
     });
 
-    const [symptoms, setSymptoms] = useState({
-        original: '',
-        aiSummary: '',
-    });
+    const updateField = (field, value) => {
+        setForm((prev) => ({ ...prev, [field]: value }));
+        if (validationErrors[field]) {
+            setValidationErrors((prev) => ({ ...prev, [field]: '' }));
+        }
+    };
 
-    const [medicines, setMedicines] = useState([]);
-    const [newMedicine, setNewMedicine] = useState({ name: '', dosage: '', frequency: '', duration: '' });
-    const [prescriptionFile, setPrescriptionFile] = useState(null);
-    const [prescriptionPreview, setPrescriptionPreview] = useState('');
-    const [doctorNotes, setDoctorNotes] = useState('');
+    const toggleArrayField = (field, value) => {
+        setForm((prev) => ({
+            ...prev,
+            [field]: prev[field].includes(value)
+                ? prev[field].filter((v) => v !== value)
+                : [...prev[field], value],
+        }));
+    };
 
-    const handleGenerateAI = async () => {
-        if (!symptoms.original.trim()) return;
+    const addQuestion = () => {
+        setForm((prev) => ({ ...prev, questionsForDoctor: [...prev.questionsForDoctor, ''] }));
+    };
+
+    const updateQuestion = (index, value) => {
+        const updated = [...form.questionsForDoctor];
+        updated[index] = value;
+        setForm((prev) => ({ ...prev, questionsForDoctor: updated }));
+    };
+
+    const removeQuestion = (index) => {
+        setForm((prev) => ({
+            ...prev,
+            questionsForDoctor: prev.questionsForDoctor.filter((_, i) => i !== index),
+        }));
+    };
+
+    const validate = () => {
+        const errors = {};
+        if (!form.chiefComplaint.trim()) errors.chiefComplaint = 'Chief complaint is required';
+        setValidationErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
+    const handleGenerateSummary = async () => {
+        if (!validate()) return;
         setAiLoading(true);
+        setError('');
         try {
-            const res = await fetch('/api/gemini', {
+            const res = await fetch('/api/visits/generate-summary', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symptoms: symptoms.original }),
+                body: JSON.stringify({
+                    chiefComplaint: form.chiefComplaint,
+                    problemStartDate: form.problemStartDate,
+                    onsetType: form.onsetType,
+                    painLocation: form.painLocation,
+                    painCharacter: form.painCharacter,
+                    severityScore: form.severityScore,
+                    aggravatingFactors: form.aggravatingFactors,
+                    relievingFactors: form.relievingFactors,
+                    associatedSymptoms: form.associatedSymptoms,
+                    medicineTaken: form.medicineTaken,
+                    similarEpisodeBefore: form.similarEpisodeBefore,
+                    similarEpisodeDetails: form.similarEpisodeDetails,
+                    recentHistory: form.recentHistory,
+                    questionsForDoctor: form.questionsForDoctor.filter((q) => q.trim()),
+                    customNotes: form.customNotes,
+                    patientName: '',
+                    patientGender: '',
+                    patientAge: '',
+                    activeConditions: [],
+                    activeMedications: [],
+                }),
             });
             const data = await res.json();
-            if (data.summary) {
-                setSymptoms({ ...symptoms, aiSummary: data.summary });
+            if (data.success && data.summary) {
+                setAiSummary(data.summary);
             } else {
-                setError(data.error || 'Could not generate AI summary');
+                setError(data.error || 'Failed to generate summary');
             }
         } catch (err) {
-            setError('Failed to generate summary');
+            setError('Failed to generate summary. Please try again.');
         } finally {
             setAiLoading(false);
         }
     };
 
-    const addMedicine = () => {
-        if (!newMedicine.name.trim()) return;
-        setMedicines([...medicines, { ...newMedicine }]);
-        setNewMedicine({ name: '', dosage: '', frequency: '', duration: '' });
-    };
-
-    const removeMedicine = (index) => {
-        setMedicines(medicines.filter((_, i) => i !== index));
-    };
-
-    const handleFileChange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            setPrescriptionFile(file);
-            const reader = new FileReader();
-            reader.onload = (ev) => setPrescriptionPreview(ev.target.result);
-            reader.readAsDataURL(file);
-        }
-    };
-
-    const handleSubmit = async () => {
-        setLoading(true);
+    const handleSave = async (status = 'Draft') => {
+        if (!validate()) return;
+        setSaving(true);
         setError('');
-
+        setSuccess('');
         try {
-            const formData = new FormData();
-            formData.append('doctorName', visitInfo.doctorName);
-            formData.append('hospitalName', visitInfo.hospitalName);
-            formData.append('specialty', visitInfo.specialty);
-            formData.append('visitDate', visitInfo.visitDate);
-            formData.append('originalSymptoms', symptoms.original);
-            formData.append('aiSummary', symptoms.aiSummary);
-            formData.append('medicines', JSON.stringify(medicines));
-            formData.append('doctorNotes', doctorNotes);
-            if (prescriptionFile) {
-                formData.append('prescription', prescriptionFile);
-            }
+            const body = {
+                chiefComplaint: form.chiefComplaint,
+                problemStartDate: form.problemStartDate,
+                onsetType: form.onsetType,
+                painLocation: form.painLocation,
+                painCharacter: form.painCharacter,
+                severityScore: form.severityScore,
+                aggravatingFactors: form.aggravatingFactors,
+                relievingFactors: form.relievingFactors,
+                associatedSymptoms: form.associatedSymptoms,
+                medicineTaken: form.medicineTaken,
+                similarEpisodeBefore: form.similarEpisodeBefore,
+                similarEpisodeDetails: form.similarEpisodeDetails,
+                recentHistory: form.recentHistory,
+                questionsForDoctor: form.questionsForDoctor.filter((q) => q.trim()),
+                customNotes: form.customNotes,
+                doctorName: form.doctorName,
+                visitDate: form.visitDate,
+                status,
+                aiGeneratedSummary: aiSummary,
+            };
 
-            const res = await fetch('/api/visits', { method: 'POST', body: formData });
+            const res = await fetch('/api/visits', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
             const data = await res.json();
-
-            if (!res.ok) {
+            if (data.success) {
+                setSuccess(status === 'Draft' ? 'Draft saved!' : 'Visit saved successfully!');
+                setTimeout(() => router.push('/visits'), 1000);
+            } else {
                 setError(data.error || 'Failed to save visit');
-                return;
             }
-
-            router.push('/visits');
-            router.refresh();
         } catch (err) {
             setError('Something went wrong');
         } finally {
-            setLoading(false);
-        }
-    };
-
-    const canProceed = () => {
-        switch (step) {
-            case 0: return visitInfo.doctorName && visitInfo.specialty && visitInfo.visitDate;
-            case 1: return symptoms.original.trim().length > 0;
-            case 2: return true;
-            case 3: return true;
-            default: return false;
+            setSaving(false);
         }
     };
 
@@ -130,34 +173,8 @@ export default function NewVisitPage() {
             <Navbar />
             <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
                 <div className="mb-8 animate-fade-in">
-                    <h1 className="page-header">Log New Visit</h1>
-                    <p className="page-subtitle">Record your medical visit details step by step</p>
-                </div>
-
-                {/* Step Indicator */}
-                <div className="mb-8 animate-slide-up">
-                    <div className="flex items-center justify-between mb-2">
-                        {STEPS.map((label, i) => (
-                            <div key={i} className="flex items-center gap-2">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all duration-300 ${i < step ? 'bg-emerald-500 text-white' :
-                                        i === step ? 'bg-primary-600 text-white shadow-lg shadow-primary-200' :
-                                            'bg-gray-100 text-gray-400'
-                                    }`}>
-                                    {i < step ? (
-                                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                        </svg>
-                                    ) : i + 1}
-                                </div>
-                                <span className={`text-xs font-medium hidden sm:block ${i === step ? 'text-primary-700' : 'text-gray-400'}`}>
-                                    {label}
-                                </span>
-                                {i < STEPS.length - 1 && (
-                                    <div className={`w-8 sm:w-16 h-0.5 mx-1 transition-colors ${i < step ? 'bg-emerald-400' : 'bg-gray-200'}`} />
-                                )}
-                            </div>
-                        ))}
-                    </div>
+                    <h1 className="page-header">Prepare for Visit</h1>
+                    <p className="page-subtitle">Fill in your symptoms to generate a clinical summary for your doctor</p>
                 </div>
 
                 {error && (
@@ -165,347 +182,216 @@ export default function NewVisitPage() {
                         {error}
                     </div>
                 )}
+                {success && (
+                    <div className="mb-4 p-3 rounded-xl bg-green-50 border border-green-100 text-green-600 text-sm animate-fade-in">
+                        {success}
+                    </div>
+                )}
 
-                {/* Step Content */}
-                <div className="card-static p-6 animate-fade-in" key={step}>
-                    {step === 0 && (
-                        <div className="space-y-5">
-                            <h2 className="section-title mb-4">Visit Information</h2>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1.5">Doctor&apos;s Name *</label>
-                                <input
-                                    type="text"
-                                    className="input-field"
-                                    placeholder="Dr. John Smith"
-                                    value={visitInfo.doctorName}
-                                    onChange={(e) => setVisitInfo({ ...visitInfo, doctorName: e.target.value })}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1.5">Hospital / Clinic Name</label>
-                                <input
-                                    type="text"
-                                    className="input-field"
-                                    placeholder="City Hospital (optional)"
-                                    value={visitInfo.hospitalName}
-                                    onChange={(e) => setVisitInfo({ ...visitInfo, hospitalName: e.target.value })}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1.5">Specialty *</label>
-                                <select
-                                    className="input-field"
-                                    value={visitInfo.specialty}
-                                    onChange={(e) => setVisitInfo({ ...visitInfo, specialty: e.target.value })}
-                                >
-                                    <option value="">Select specialty</option>
-                                    {SPECIALTIES.map((s) => (
-                                        <option key={s} value={s}>{s}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1.5">Date of Visit *</label>
-                                <input
-                                    type="date"
-                                    className="input-field"
-                                    value={visitInfo.visitDate}
-                                    onChange={(e) => setVisitInfo({ ...visitInfo, visitDate: e.target.value })}
-                                />
-                            </div>
+                <div className="card-static p-6 space-y-6 animate-slide-up">
+                    {/* Visit Info */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Doctor&apos;s Name</label>
+                            <input
+                                type="text"
+                                className="input-field"
+                                placeholder="Dr. John Smith"
+                                value={form.doctorName}
+                                onChange={(e) => updateField('doctorName', e.target.value)}
+                            />
                         </div>
-                    )}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Visit Date</label>
+                            <input
+                                type="date"
+                                className="input-field"
+                                value={form.visitDate}
+                                onChange={(e) => updateField('visitDate', e.target.value)}
+                            />
+                        </div>
+                    </div>
 
-                    {step === 1 && (
-                        <div className="space-y-5">
-                            <h2 className="section-title mb-4">Symptoms & Problem Description</h2>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                                    Describe what you were feeling *
+                    <hr className="border-gray-100" />
+
+                    {/* 1. Chief Complaint */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                            1. Chief Complaint <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                            type="text"
+                            className={`input-field ${validationErrors.chiefComplaint ? 'border-red-400 focus:ring-red-300' : ''}`}
+                            placeholder="What is your main problem today?"
+                            value={form.chiefComplaint}
+                            onChange={(e) => updateField('chiefComplaint', e.target.value)}
+                        />
+                        {validationErrors.chiefComplaint && (
+                            <p className="text-sm text-red-600 mt-1">{validationErrors.chiefComplaint}</p>
+                        )}
+                    </div>
+
+                    {/* 2. When did it start */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">2. When did the problem start?</label>
+                        <input type="date" className="input-field" value={form.problemStartDate} onChange={(e) => updateField('problemStartDate', e.target.value)} />
+                    </div>
+
+                    {/* 3. How did it start */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">3. How did it start?</label>
+                        <div className="flex gap-4">
+                            {['Sudden', 'Gradual'].map((type) => (
+                                <label key={type} className="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="onsetType" value={type} checked={form.onsetType === type} onChange={(e) => updateField('onsetType', e.target.value)} className="w-4 h-4 text-primary-600 focus:ring-primary-500" />
+                                    <span className="text-sm text-gray-700">{type}</span>
                                 </label>
-                                <p className="text-xs text-gray-400 mb-2">Write in your own words — casual language is perfectly fine.</p>
-                                <textarea
-                                    className="input-field min-h-[120px] resize-y"
-                                    placeholder="e.g., I had a bad headache for 3 days and felt dizzy sometimes. Also had a mild fever at night..."
-                                    value={symptoms.original}
-                                    onChange={(e) => setSymptoms({ ...symptoms, original: e.target.value })}
-                                />
-                            </div>
-
-                            <button
-                                type="button"
-                                onClick={handleGenerateAI}
-                                disabled={!symptoms.original.trim() || aiLoading}
-                                className="btn-secondary flex items-center gap-2"
-                            >
-                                {aiLoading ? (
-                                    <>
-                                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                        </svg>
-                                        Generating...
-                                    </>
-                                ) : (
-                                    <>
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
-                                        </svg>
-                                        Generate AI Summary
-                                    </>
-                                )}
-                            </button>
-
-                            {symptoms.aiSummary && (
-                                <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl border border-blue-100 animate-fade-in">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <svg className="w-4 h-4 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                                        </svg>
-                                        <span className="text-sm font-semibold text-primary-700">AI-Generated Clinical Summary</span>
-                                    </div>
-                                    <p className="text-sm text-gray-700 leading-relaxed">{symptoms.aiSummary}</p>
-                                </div>
-                            )}
+                            ))}
                         </div>
-                    )}
+                    </div>
 
-                    {step === 2 && (
-                        <div className="space-y-5">
-                            <h2 className="section-title mb-4">Medicines & Prescription</h2>
+                    {/* 4. Where is the problem located */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">4. Where is the problem located?</label>
+                        <input type="text" className="input-field" placeholder="e.g. chest, lower back, right knee" value={form.painLocation} onChange={(e) => updateField('painLocation', e.target.value)} />
+                    </div>
 
-                            {/* Add medicine form */}
-                            <div className="p-4 bg-gray-50 rounded-xl space-y-3">
-                                <p className="text-sm font-medium text-gray-700">Add Medicine</p>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <input
-                                        type="text"
-                                        className="input-field text-sm"
-                                        placeholder="Medicine Name *"
-                                        value={newMedicine.name}
-                                        onChange={(e) => setNewMedicine({ ...newMedicine, name: e.target.value })}
-                                    />
-                                    <input
-                                        type="text"
-                                        className="input-field text-sm"
-                                        placeholder="Dosage (e.g., 500mg)"
-                                        value={newMedicine.dosage}
-                                        onChange={(e) => setNewMedicine({ ...newMedicine, dosage: e.target.value })}
-                                    />
-                                    <input
-                                        type="text"
-                                        className="input-field text-sm"
-                                        placeholder="Frequency (e.g., Twice daily)"
-                                        value={newMedicine.frequency}
-                                        onChange={(e) => setNewMedicine({ ...newMedicine, frequency: e.target.value })}
-                                    />
-                                    <input
-                                        type="text"
-                                        className="input-field text-sm"
-                                        placeholder="Duration (e.g., 5 days)"
-                                        value={newMedicine.duration}
-                                        onChange={(e) => setNewMedicine({ ...newMedicine, duration: e.target.value })}
-                                    />
-                                </div>
-                                <button type="button" onClick={addMedicine} disabled={!newMedicine.name.trim()} className="btn-secondary text-sm py-2">
-                                    + Add Medicine
-                                </button>
-                            </div>
-
-                            {/* Medicine list */}
-                            {medicines.length > 0 && (
-                                <div className="space-y-2">
-                                    <p className="text-sm font-medium text-gray-700">Added Medicines ({medicines.length})</p>
-                                    {medicines.map((med, i) => (
-                                        <div key={i} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl animate-slide-up">
-                                            <div>
-                                                <p className="font-medium text-sm text-gray-900">{med.name}</p>
-                                                <p className="text-xs text-gray-500">
-                                                    {[med.dosage, med.frequency, med.duration].filter(Boolean).join(' · ') || 'No details'}
-                                                </p>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => removeMedicine(i)}
-                                                className="p-1.5 hover:bg-red-50 rounded-lg text-red-400 hover:text-red-600 transition-colors"
-                                            >
-                                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Prescription upload */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1.5">Prescription Photo</label>
-                                <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center hover:border-primary-300 transition-colors">
-                                    {prescriptionPreview ? (
-                                        <div className="relative">
-                                            <img src={prescriptionPreview} alt="Prescription" className="max-h-48 mx-auto rounded-lg" />
-                                            <button
-                                                type="button"
-                                                onClick={() => { setPrescriptionFile(null); setPrescriptionPreview(''); }}
-                                                className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
-                                            >
-                                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <svg className="w-10 h-10 text-gray-300 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5M3.75 3h16.5M3.75 3v18" />
-                                            </svg>
-                                            <p className="text-sm text-gray-500 mb-2">Upload a photo of your prescription</p>
-                                            <label className="btn-secondary text-sm py-2 cursor-pointer inline-block">
-                                                Choose File
-                                                <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-                                            </label>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Doctor notes */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1.5">Doctor Notes (optional)</label>
-                                <textarea
-                                    className="input-field min-h-[80px] resize-y"
-                                    placeholder="Any additional notes from the doctor..."
-                                    value={doctorNotes}
-                                    onChange={(e) => setDoctorNotes(e.target.value)}
-                                />
-                            </div>
+                    {/* 5. Describe the sensation */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">5. Describe the sensation</label>
+                        <div className="flex flex-wrap gap-2">
+                            {PAIN_CHARACTERS.map((char) => (
+                                <label key={char} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all ${form.painCharacter.includes(char) ? 'bg-primary-50 border-primary-300 text-primary-700' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                                    <input type="checkbox" checked={form.painCharacter.includes(char)} onChange={() => toggleArrayField('painCharacter', char)} className="sr-only" />
+                                    <span className="text-sm">{char}</span>
+                                </label>
+                            ))}
                         </div>
-                    )}
+                    </div>
 
-                    {step === 3 && (
-                        <div className="space-y-6">
-                            <h2 className="section-title mb-4">Review Your Visit</h2>
-
-                            {/* Visit Info Summary */}
-                            <div className="p-4 bg-gray-50 rounded-xl space-y-2">
-                                <p className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Visit Information</p>
-                                <SummaryRow label="Doctor" value={`Dr. ${visitInfo.doctorName}`} />
-                                {visitInfo.hospitalName && <SummaryRow label="Hospital" value={visitInfo.hospitalName} />}
-                                <SummaryRow label="Specialty" value={visitInfo.specialty} />
-                                <SummaryRow label="Date" value={new Date(visitInfo.visitDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })} />
-                            </div>
-
-                            {/* Symptoms Summary */}
-                            <div className="p-4 bg-gray-50 rounded-xl space-y-3">
-                                <p className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Symptoms</p>
-                                <div>
-                                    <p className="text-xs text-gray-400 mb-1">Your description</p>
-                                    <p className="text-sm text-gray-700">{symptoms.original}</p>
-                                </div>
-                                {symptoms.aiSummary && (
-                                    <div className="pt-3 border-t border-gray-200">
-                                        <p className="text-xs text-primary-500 mb-1 flex items-center gap-1">
-                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l" />
-                                            </svg>
-                                            AI Clinical Summary
-                                        </p>
-                                        <p className="text-sm text-gray-700">{symptoms.aiSummary}</p>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Medicines Summary */}
-                            {medicines.length > 0 && (
-                                <div className="p-4 bg-gray-50 rounded-xl">
-                                    <p className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Medicines ({medicines.length})</p>
-                                    <div className="space-y-2">
-                                        {medicines.map((med, i) => (
-                                            <div key={i} className="flex items-center gap-2 text-sm">
-                                                <span className="w-5 h-5 bg-primary-100 rounded-full flex items-center justify-center text-xs font-medium text-primary-700">{i + 1}</span>
-                                                <span className="font-medium text-gray-900">{med.name}</span>
-                                                {med.dosage && <span className="text-gray-500">· {med.dosage}</span>}
-                                                {med.frequency && <span className="text-gray-500">· {med.frequency}</span>}
-                                                {med.duration && <span className="text-gray-500">· {med.duration}</span>}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {prescriptionPreview && (
-                                <div className="p-4 bg-gray-50 rounded-xl">
-                                    <p className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Prescription</p>
-                                    <img src={prescriptionPreview} alt="Prescription" className="max-h-40 rounded-lg" />
-                                </div>
-                            )}
-
-                            {doctorNotes && (
-                                <div className="p-4 bg-gray-50 rounded-xl">
-                                    <p className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-2">Doctor Notes</p>
-                                    <p className="text-sm text-gray-700">{doctorNotes}</p>
-                                </div>
-                            )}
+                    {/* 6. Severity */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">6. Severity right now</label>
+                        <div className="flex items-center gap-4">
+                            <input type="range" min="1" max="10" value={form.severityScore} onChange={(e) => updateField('severityScore', parseInt(e.target.value))} className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600" />
+                            <span className="text-2xl font-bold text-primary-600 min-w-[40px] text-center">{form.severityScore}</span>
                         </div>
-                    )}
+                        <div className="flex justify-between text-xs text-gray-400 mt-1"><span>Mild</span><span>Severe</span></div>
+                    </div>
+
+                    {/* 7. What makes it worse */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">7. What makes it worse?</label>
+                        <input type="text" className="input-field" placeholder="e.g. bending, walking, eating" value={form.aggravatingFactors} onChange={(e) => updateField('aggravatingFactors', e.target.value)} />
+                    </div>
+
+                    {/* 8. What makes it better */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">8. What makes it better?</label>
+                        <input type="text" className="input-field" placeholder="e.g. rest, ice, medication" value={form.relievingFactors} onChange={(e) => updateField('relievingFactors', e.target.value)} />
+                    </div>
+
+                    {/* 9. Other symptoms */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">9. Other symptoms you have noticed</label>
+                        <div className="flex flex-wrap gap-2">
+                            {ASSOCIATED_SYMPTOMS.map((sym) => (
+                                <label key={sym} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all ${form.associatedSymptoms.includes(sym) ? 'bg-primary-50 border-primary-300 text-primary-700' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                                    <input type="checkbox" checked={form.associatedSymptoms.includes(sym)} onChange={() => toggleArrayField('associatedSymptoms', sym)} className="sr-only" />
+                                    <span className="text-sm">{sym}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* 10. Medicine taken */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">10. Have you taken any medicine for this?</label>
+                        <input type="text" className="input-field" placeholder="e.g. Paracetamol 500mg" value={form.medicineTaken} onChange={(e) => updateField('medicineTaken', e.target.value)} />
+                    </div>
+
+                    {/* 11. Similar problem before */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">11. Similar problem before?</label>
+                        <div className="flex gap-4 mb-2">
+                            {[true, false].map((val) => (
+                                <label key={String(val)} className="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="similarEpisodeBefore" checked={form.similarEpisodeBefore === val} onChange={() => updateField('similarEpisodeBefore', val)} className="w-4 h-4 text-primary-600 focus:ring-primary-500" />
+                                    <span className="text-sm text-gray-700">{val ? 'Yes' : 'No'}</span>
+                                </label>
+                            ))}
+                        </div>
+                        {form.similarEpisodeBefore && (
+                            <input type="text" className="input-field animate-fade-in" placeholder="Please describe the previous episode" value={form.similarEpisodeDetails} onChange={(e) => updateField('similarEpisodeDetails', e.target.value)} />
+                        )}
+                    </div>
+
+                    {/* 12. Recent changes */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">12. Any recent changes?</label>
+                        <input type="text" className="input-field" placeholder="e.g. travel, diet change, stress, new medicine" value={form.recentHistory} onChange={(e) => updateField('recentHistory', e.target.value)} />
+                    </div>
+
+                    {/* 13. Questions for doctor */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">13. Questions for your doctor</label>
+                        <div className="space-y-2">
+                            {form.questionsForDoctor.map((q, i) => (
+                                <div key={i} className="flex gap-2 animate-fade-in">
+                                    <input type="text" className="input-field flex-1" placeholder={`Question ${i + 1}`} value={q} onChange={(e) => updateQuestion(i, e.target.value)} />
+                                    <button type="button" onClick={() => removeQuestion(i)} className="p-2.5 hover:bg-red-50 rounded-xl text-red-400 hover:text-red-600 transition-colors"><X className="w-4 h-4" /></button>
+                                </div>
+                            ))}
+                        </div>
+                        <button type="button" onClick={addQuestion} className="mt-2 text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"><Plus className="w-4 h-4" />Add Question</button>
+                    </div>
+
+                    {/* 14. Additional notes */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">14. Additional notes</label>
+                        <textarea className="input-field min-h-[80px] resize-y" placeholder="Anything else you want to tell your doctor..." value={form.customNotes} onChange={(e) => updateField('customNotes', e.target.value)} />
+                    </div>
                 </div>
 
-                {/* Navigation Buttons */}
-                <div className="flex items-center justify-between mt-6">
-                    <button
-                        type="button"
-                        onClick={() => step === 0 ? router.push('/visits') : setStep(step - 1)}
-                        className="btn-secondary"
-                    >
-                        {step === 0 ? 'Cancel' : '← Back'}
+                {/* AI Summary Section */}
+                {aiSummary && (
+                    <div className="mt-6 animate-fade-in">
+                        <div className="flex items-center justify-between mb-2">
+                            <h3 className="section-title flex items-center gap-2">
+                                <Sparkles className="w-5 h-5 text-primary-500" />
+                                AI-Generated Clinical Summary
+                            </h3>
+                            <button type="button" onClick={handleGenerateSummary} disabled={aiLoading} className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1">
+                                <RefreshCw className={`w-4 h-4 ${aiLoading ? 'animate-spin' : ''}`} />
+                                Regenerate
+                            </button>
+                        </div>
+                        <div className="bg-gray-900 text-white font-mono text-sm rounded-lg p-4 max-h-96 overflow-auto whitespace-pre-wrap leading-relaxed">
+                            {aiSummary}
+                        </div>
+                    </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row items-center gap-3 mt-6">
+                    <button type="button" onClick={() => handleSave('Draft')} disabled={saving} className="btn-secondary w-full sm:w-auto flex items-center justify-center gap-2">
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        Save as Draft
                     </button>
 
-                    {step < 3 ? (
-                        <button
-                            type="button"
-                            onClick={() => setStep(step + 1)}
-                            disabled={!canProceed()}
-                            className="btn-primary"
-                        >
-                            Next →
-                        </button>
-                    ) : (
-                        <button
-                            type="button"
-                            onClick={handleSubmit}
-                            disabled={loading}
-                            className="btn-primary flex items-center gap-2"
-                        >
-                            {loading ? (
-                                <>
-                                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                    </svg>
-                                    Saving...
-                                </>
-                            ) : (
-                                <>
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                                    </svg>
-                                    Save Visit
-                                </>
-                            )}
-                        </button>
-                    )}
+                    <button type="button" onClick={handleGenerateSummary} disabled={aiLoading || !form.chiefComplaint.trim()} className="btn-secondary w-full sm:w-auto flex items-center justify-center gap-2">
+                        {aiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                        {aiLoading ? 'Generating...' : 'Generate Summary'}
+                    </button>
+
+                    <button type="button" onClick={() => handleSave('Awaiting Doctor')} disabled={saving} className="btn-primary w-full sm:w-auto flex items-center justify-center gap-2">
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        Save Visit
+                    </button>
+
+                    <button type="button" onClick={() => router.push('/visits')} className="text-sm text-gray-500 hover:text-gray-700">Cancel</button>
                 </div>
             </main>
         </>
-    );
-}
-
-function SummaryRow({ label, value }) {
-    return (
-        <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">{label}</span>
-            <span className="text-sm font-medium text-gray-900">{value}</span>
-        </div>
     );
 }
