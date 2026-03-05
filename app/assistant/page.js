@@ -122,8 +122,8 @@ export default function AssistantPage() {
         try {
             const body = { message: msgText };
             if (imgB64) {
-                body.image = imgB64;
-                body.mimeType = imgMime;
+                body.imageBase64 = imgB64;
+                body.imageMimeType = imgMime;
             }
 
             const res = await fetch(`/api/assistant/session/${sessionId}/message`, {
@@ -620,15 +620,15 @@ function ChatBubble({ message, onSpeak }) {
     const isUser = message.role === 'user';
 
     return (
-        <div className={`flex ${isUser ? 'justify-end' : 'items-start gap-2'} mb-4`}>
+        <div className={`flex w-full mb-4 ${isUser ? 'justify-end' : 'justify-start'}`}>
             {!isUser && (
-                <div className="w-7 h-7 bg-green-100 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+                <div className="w-7 h-7 bg-green-100 rounded-full flex items-center justify-center shrink-0 mt-0.5 mr-2">
                     <Bot className="w-3.5 h-3.5 text-green-700" />
                 </div>
             )}
-            <div className={`max-w-[80%] ${isUser
-                ? 'bg-blue-600 text-white rounded-tl-2xl rounded-tr-sm rounded-bl-2xl px-4 py-3'
-                : 'bg-white border border-gray-200 rounded-tl-sm rounded-tr-2xl rounded-br-2xl px-4 py-3'
+            <div className={`max-w-[80%] px-4 py-3 ${isUser
+                ? 'bg-blue-600 text-white rounded-tl-2xl rounded-tr-sm rounded-bl-2xl ml-auto'
+                : 'bg-white border border-gray-200 text-gray-800 rounded-tl-sm rounded-tr-2xl rounded-br-2xl mr-auto'
                 }`}>
                 {/* User image */}
                 {isUser && message.hasImage && message.imagePreview && (
@@ -639,12 +639,9 @@ function ChatBubble({ message, onSpeak }) {
                     {message.content}
                 </p>
 
-                {/* AI disclaimer + speak button */}
+                {/* AI speak button */}
                 {!isUser && (
-                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-                        <p className="text-xs text-gray-400">
-                            ⚠️ AI-generated information only. Not a substitute for professional medical advice.
-                        </p>
+                    <div className="flex items-center justify-end mt-2 pt-2 border-t border-gray-100">
                         <button
                             onClick={() => onSpeak(message.content)}
                             className="p-1 hover:bg-gray-100 rounded ml-2 shrink-0"

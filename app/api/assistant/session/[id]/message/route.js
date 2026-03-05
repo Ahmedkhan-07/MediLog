@@ -29,8 +29,8 @@ export async function POST(request, { params }) {
 
         const body = await request.json();
         const messageText = body.message || '';
-        const imageBase64 = body.image || null;
-        const imageMimeType = body.mimeType || 'image/jpeg';
+        const imageBase64 = body.imageBase64 || null;
+        const imageMimeType = body.imageMimeType || 'image/jpeg';
 
         if (!messageText.trim() && !imageBase64) {
             return NextResponse.json(
@@ -56,7 +56,7 @@ export async function POST(request, { params }) {
         // Prepare image data if present
         const imageData = imageBase64 ? { base64: imageBase64, mimeType: imageMimeType } : null;
 
-        // Call Gemini — generateChatResponse handles system prompt prepending internally
+        // Call AI — Groq for text, Gemini for image (routed internally by generateChatResponse)
         const aiResult = await generateChatResponse(conversationHistory, imageData);
 
         const replyText = aiResult.success
